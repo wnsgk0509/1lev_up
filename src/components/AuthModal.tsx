@@ -23,7 +23,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (!isSupabaseConfigured) {
       setMessage({
         type: 'error',
-        text: 'Supabase 연동 정보가 설정되지 않았습니다. .env 파일에 VITE_SUPABASE_URL 및 ANON_KEY를 등록해주세요.',
+        text: 'Supabase 연동 정보가 설정되지 않았습니다. .env 파일에 VITE_SUPABASE_URL 및 VITE_SUPABASE_PUBLISHABLE_KEY를 등록해주세요.',
       });
       return;
     }
