@@ -9,7 +9,10 @@ import {
   Download, 
   Upload,
   Settings,
-  Sparkles
+  Sparkles,
+  Cloud,
+  LogOut,
+  User as UserIcon
 } from 'lucide-react';
 import { formatDateKorean, getTodayDateString, getPreviousDateString, getNextDateString } from '../utils/storage';
 
@@ -23,6 +26,9 @@ interface HeaderProps {
   onImportClick: () => void;
   onOpenSettings: () => void;
   onOpenOnboarding: () => void;
+  user?: { email?: string } | null;
+  onOpenAuth: () => void;
+  onLogout: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -35,6 +41,9 @@ export const Header: React.FC<HeaderProps> = ({
   onImportClick,
   onOpenSettings,
   onOpenOnboarding,
+  user,
+  onOpenAuth,
+  onLogout,
 }) => {
   const todayStr = getTodayDateString();
   const isToday = currentDate === todayStr;
@@ -73,7 +82,33 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* 클라우드 로그인 / 프로필 버튼 */}
+            {user ? (
+              <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-xs">
+                <UserIcon className="w-3.5 h-3.5 text-indigo-600" />
+                <span className="max-w-[100px] sm:max-w-[140px] truncate text-slate-700 font-medium">
+                  {user.email?.split('@')[0]}
+                </span>
+                <button
+                  onClick={onLogout}
+                  className="p-1 text-slate-400 hover:text-rose-500 rounded transition-colors ml-0.5"
+                  title="로그아웃"
+                >
+                  <LogOut className="w-3 h-3" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={onOpenAuth}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-200 transition-colors shadow-2xs"
+                title="로그인하고 기기 간 클라우드 실시간 동기화하기"
+              >
+                <Cloud className="w-3.5 h-3.5 text-indigo-600" />
+                <span>동기화</span>
+              </button>
+            )}
+
             {/* 추천 예시 팝업 버튼 */}
             <button
               onClick={onOpenOnboarding}

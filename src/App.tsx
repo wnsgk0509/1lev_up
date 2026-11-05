@@ -18,12 +18,19 @@ import { RecordModal } from './components/RecordModal';
 import { EveningTimerModal } from './components/EveningTimerModal';
 import { RoutineManagerModal } from './components/RoutineManagerModal';
 import { OnboardingModal } from './components/OnboardingModal';
+import { AuthModal } from './components/AuthModal';
+import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { migrateLocalToCloud, saveDailyLogToCloud, saveRoutinesToCloud } from './services/cloudSync';
 import { Sparkles, Quote } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(loadAppState);
   const [currentDate, setCurrentDate] = useState<string>(getTodayDateString());
   const [activeTab, setActiveTab] = useState<'today' | 'stats' | 'books'>('today');
+
+  // 사용자 인증 상태
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   // 모달 제어 상태
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
@@ -36,7 +43,39 @@ export const App: React.FC = () => {
   // 숨겨진 파일 인풋 (백업 가져오기용)
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // appState 변경 시마다 localStorage에 동기화
+  // 1. Supabase Auth 세션 감지 및 로컬 데이터 스마트 병합
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    // 초기 세션 확인
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser({ id: session.user.id, email: session.user.email });
+        // 스마트 병합 실행
+        migrateLocalToCloud(session.user.id, appState).then((merged) => {
+          setAppState(merged);
+        });
+      }
+    });
+
+    // 인증 상태 변경 리스너
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUser({ id: session.user.id, email: session.user.email });
+        migrateLocalToCloud(session.user.id, appState).then((merged) => {
+          setAppState(merged);
+        });
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // 2. appState 변경 시마다 localStorage에 동기화
   useEffect(() => {
     saveAppState(appState);
   }, [appState]);
@@ -49,16 +88,23 @@ export const App: React.FC = () => {
 
   // DailyLog 업데이트 헬퍼
   const updateDailyLog = (updatedLog: DailyLog) => {
+    const nextLog = {
+      ...updatedLog,
+      updatedAt: new Date().toISOString(),
+    };
+
     setAppState((prev) => ({
       ...prev,
       logs: {
         ...prev.logs,
-        [currentDate]: {
-          ...updatedLog,
-          updatedAt: new Date().toISOString(),
-        },
+        [currentDate]: nextLog,
       },
     }));
+
+    // 로그인 상태라면 클라우드에도 실시간 저장
+    if (user) {
+      saveDailyLogToCloud(user.id, currentDate, nextLog);
+    }
   };
 
   // One Thing 업데이트
@@ -182,6 +228,10 @@ export const App: React.FC = () => {
       hasCompletedOnboarding: true,
       routinesConfig: newConfig,
     }));
+
+    if (user) {
+      saveRoutinesToCloud(user.id, newConfig);
+    }
   };
 
   // 온보딩에서 추천 루틴 적용 핸들러
@@ -191,6 +241,18 @@ export const App: React.FC = () => {
       hasCompletedOnboarding: true,
       routinesConfig: selectedRoutines,
     }));
+
+    if (user) {
+      saveRoutinesToCloud(user.id, selectedRoutines);
+    }
+  };
+
+  // 로그아웃 핸들러
+  const handleLogout = async () => {
+    if (isSupabaseConfigured) {
+      await supabase.auth.signOut();
+    }
+    setUser(null);
   };
 
   // JSON 백업 내보내기 & 가져오기
@@ -234,6 +296,9 @@ export const App: React.FC = () => {
         onImportClick={() => fileInputRef.current?.click()}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenOnboarding={() => setIsOnboardingOpen(true)}
+        user={user}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onLogout={handleLogout}
       />
 
       {/* 메인 컨테이너 */}
@@ -377,6 +442,12 @@ export const App: React.FC = () => {
         onClose={() => setIsOnboardingOpen(false)}
         onApplyRoutines={handleApplyOnboardingRoutines}
         onOpenCustomizer={() => setIsSettingsOpen(true)}
+      />
+
+      {/* 클라우드 로그인 및 동기화 모달 */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
       />
     </div>
   );
